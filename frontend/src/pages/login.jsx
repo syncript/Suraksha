@@ -1,71 +1,65 @@
-import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 function Login() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [message, setMessage] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    setMessage("")
-    setLoading(true)
+    setMessage("");
+    setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        }
-      )
+      const response = await fetch("http://localhost:8000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        setMessage(data.message || "Login failed")
-        return
+        setMessage(data.message || "Login failed");
+        return;
       }
 
       localStorage.setItem(
         "surakshaUser",
         JSON.stringify({
           ...data.user,
-         token: data.token,
-         })
-        )
+          token: data.token,
+        }),
+      );
 
-      setMessage("Login successful!")
+      setMessage("Login successful!");
 
       setTimeout(() => {
-        navigate("/dashboard")
-      }, 500)
+        navigate("/dashboard");
+      }, 500);
     } catch (error) {
-      console.error("LOGIN ERROR:", error)
-      setMessage("Cannot connect to server")
+      console.error("LOGIN ERROR:", error);
+      setMessage("Cannot connect to server");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-800">
-            Suraksha
-          </h1>
+          <h1 className="text-3xl font-bold text-slate-800">Suraksha</h1>
 
           <p className="mt-2 text-slate-500">
             LPG Gas Safety & Monitoring System
@@ -77,7 +71,6 @@ function Login() {
         </h2>
 
         <form onSubmit={handleLogin}>
-
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Email
@@ -115,29 +108,21 @@ function Login() {
           >
             {loading ? "Logging in..." : "Login"}
           </button>
-
         </form>
 
         {message && (
-          <p className="text-center mt-4 text-slate-700">
-            {message}
-          </p>
+          <p className="text-center mt-4 text-slate-700">{message}</p>
         )}
 
         <p className="text-center text-sm text-slate-500 mt-6">
           Don't have an account?{" "}
-
-          <Link
-            to="/register"
-            className="text-blue-600 font-medium"
-          >
+          <Link to="/register" className="text-blue-600 font-medium">
             Create account
           </Link>
         </p>
-
       </div>
     </div>
-  )
+  );
 }
 
-export default Login
+export default Login;

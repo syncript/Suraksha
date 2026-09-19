@@ -1,68 +1,60 @@
-
-import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 function Register() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [message, setMessage] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e) => {
-    e.preventDefault()
+    e.preventDefault();
 
-    setMessage("")
-    setLoading(true)
+    setMessage("");
+    setLoading(true);
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/auth/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name,
-            email,
-            password,
-          }),
-        }
-      )
+      const response = await fetch("http://localhost:8000/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+        }),
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        setMessage(data.message || "Registration failed")
-        return
+        setMessage(data.message || "Registration failed");
+        return;
       }
 
-      setMessage("Registration successful!")
+      setMessage("Registration successful!");
 
       setTimeout(() => {
-        navigate("/")
-      }, 1000)
+        navigate("/");
+      }, 1000);
     } catch (error) {
-      console.error("REGISTER ERROR:", error)
-      setMessage("Cannot connect to server")
+      console.error("REGISTER ERROR:", error);
+      setMessage("Cannot connect to server");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
-        <h1 className="text-3xl font-bold text-center mb-2">
-          Create Account
-        </h1>
+        <h1 className="text-3xl font-bold text-center mb-2">Create Account</h1>
 
-        <p className="text-gray-500 text-center mb-6">
-          Register for Suraksha
-        </p>
+        <p className="text-gray-500 text-center mb-6">Register for Suraksha</p>
 
         <form onSubmit={handleRegister} className="space-y-4">
           <input
@@ -101,24 +93,17 @@ function Register() {
           </button>
         </form>
 
-        {message && (
-          <p className="text-center mt-4 text-gray-700">
-            {message}
-          </p>
-        )}
+        {message && <p className="text-center mt-4 text-gray-700">{message}</p>}
 
         <p className="text-center mt-6 text-gray-600">
           Already have an account?{" "}
-          <Link
-            to="/"
-            className="text-blue-600 font-medium"
-          >
+          <Link to="/" className="text-blue-600 font-medium">
             Login
           </Link>
         </p>
       </div>
     </div>
-  )
+  );
 }
 
-export default Register
+export default Register;
