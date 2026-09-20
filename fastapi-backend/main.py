@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from dependencies import get_current_user
 from routes.devices import router as devices_router
@@ -7,12 +7,14 @@ from routes.alerts import router as alerts_router
 from database import Base, engine
 from models import User, Device, SensorReading, Alert
 from routes.auth import router as auth_router
+from websocket_manager import connected_clients
 
 
 Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(title="Suraksha API")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -40,7 +42,7 @@ def health():
         "message": "Suraksha FastAPI is healthy"
     }
 @app.get("/api/protected-test")
-def protected_test(current_user = Depends(get_current_user)):
+def protected_test(current_user=Depends(get_current_user)):
     return {
         "message": "JWT authentication working",
         "user": {
@@ -49,3 +51,17 @@ def protected_test(current_user = Depends(get_current_user)):
             "email": current_user.email
         }
     }
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    connected_clients.append(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+
+    except Exception:
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)

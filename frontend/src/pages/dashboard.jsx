@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { io } from "socket.io-client";
 
 import {
   LineChart,
@@ -23,6 +22,7 @@ function Dashboard() {
   const [error, setError] = useState("");
   const [alerts, setAlerts] = useState([]);
   const [exhaustFanOn, setExhaustFanOn] = useState(false);
+  const selectedDeviceIdRef = useRef(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("surakshaUser");
@@ -43,8 +43,9 @@ function Dashboard() {
           Authorization: `Bearer ${token}`,
         };
 
+        // Fetch devices
         const deviceResponse = await fetch(
-          "http://localhost:5000/api/devices",
+          "http://localhost:8000/api/devices",
           {
             headers,
           },
@@ -53,20 +54,26 @@ function Dashboard() {
         const deviceData = await deviceResponse.json();
 
         if (!deviceResponse.ok) {
-          throw new Error(deviceData.message || "Failed to fetch devices");
+          throw new Error(deviceData.detail || "Failed to fetch devices");
         }
 
-        if (!deviceData.devices || deviceData.devices.length === 0) {
+        const devices = Array.isArray(deviceData)
+          ? deviceData
+          : deviceData.devices || [];
+
+        if (devices.length === 0) {
           setLoading(false);
           return;
         }
 
-        const selectedDevice = deviceData.devices[0];
+        const selectedDevice = devices[0];
 
         setDevice(selectedDevice);
+        selectedDeviceIdRef.current = selectedDevice.id;
 
+        // Fetch sensor history
         const sensorResponse = await fetch(
-          `http://localhost:5000/api/sensors/${selectedDevice.id}`,
+          `http://localhost:8000/api/sensors/${selectedDevice.id}`,
           {
             headers,
           },
@@ -75,14 +82,19 @@ function Dashboard() {
         const sensorData = await sensorResponse.json();
 
         if (!sensorResponse.ok) {
-          throw new Error(sensorData.message || "Failed to fetch sensor data");
+          throw new Error(sensorData.detail || "Failed to fetch sensor data");
         }
 
-        if (sensorData.readings && sensorData.readings.length > 0) {
-          setReading(sensorData.readings[0]);
-          setExhaustFanOn(Number(sensorData.readings[0].lpg_ppm) >= 800);
+        const readings = Array.isArray(sensorData)
+          ? sensorData
+          : sensorData.readings || [];
 
-          const chartData = [...sensorData.readings].reverse().map((item) => ({
+        if (readings.length > 0) {
+          setReading(readings[0]);
+
+          setExhaustFanOn(Number(readings[0].lpg_ppm) >= 800);
+
+          const chartData = [...readings].reverse().map((item) => ({
             time: new Date(item.recorded_at).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
@@ -94,17 +106,23 @@ function Dashboard() {
 
           setHistory(chartData);
         }
-        const alertResponse = await fetch("http://localhost:5000/api/alerts", {
+
+        // Fetch alerts
+        const alertResponse = await fetch("http://localhost:8000/api/alerts", {
           headers,
         });
 
         const alertData = await alertResponse.json();
 
         if (!alertResponse.ok) {
-          throw new Error(alertData.message || "Failed to fetch alerts");
+          throw new Error(alertData.detail || "Failed to fetch alerts");
         }
 
-        setAlerts(alertData.alerts || []);
+        const alertList = Array.isArray(alertData)
+          ? alertData
+          : alertData.alerts || [];
+
+        setAlerts(alertList);
       } catch (err) {
         console.error("DASHBOARD ERROR:", err);
         setError(err.message);
@@ -115,80 +133,122 @@ function Dashboard() {
 
     fetchSensorData();
 
-    const socket = io("http://localhost:5000", {
-      auth: {
-        token: parsedUser.token,
-      },
-    });
+    // FastAPI WebSocket
+    const websocket = new WebSocket("ws://localhost:8000/ws");
 
-    socket.on("connect", () => {
+    websocket.onopen = () => {
       console.log("Connected to Suraksha real-time server");
-    });
+    };
 
-    socket.on("sensor-update", (newReading) => {
-      console.log("REAL-TIME SENSOR UPDATE:", newReading);
+    websocket.onmessage = (event) => {
+      try {
+        const newReading = JSON.parse(event.data);
 
-      setReading(newReading);
+        console.log("REAL-TIME SENSOR UPDATE:", newReading);
 
-      setExhaustFanOn(Boolean(newReading.exhaust_fan_on));
-
-      setDevice((currentDevice) => {
-        if (!currentDevice) {
-          return currentDevice;
+        // Ignore readings from other devices
+        if (newReading.device_id !== selectedDeviceIdRef.current) {
+          return;
         }
 
-        if (currentDevice.id === newReading.device_id) {
+        setDevice((currentDevice) => {
+          if (!currentDevice) {
+            return currentDevice;
+          }
+
           return {
             ...currentDevice,
             status: "online",
             last_seen: newReading.recorded_at,
           };
+        });
+
+        setReading(newReading);
+
+        setExhaustFanOn(Boolean(newReading.exhaust_fan_on));
+
+        const newChartPoint = {
+          time: new Date(newReading.recorded_at).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          lpg: Number(newReading.lpg_ppm),
+          temperature: Number(newReading.temperature),
+          humidity: Number(newReading.humidity),
+        };
+
+        setHistory((currentHistory) => [...currentHistory, newChartPoint]);
+
+        // Refresh alerts when a new alert is created
+        if (newReading.alert_created) {
+          fetch("http://localhost:8000/api/alerts", {
+            headers: {
+              Authorization: `Bearer ${parsedUser.token}`,
+            },
+          })
+            .then((response) => response.json())
+            .then((data) => {
+              const alertList = Array.isArray(data) ? data : data.alerts || [];
+
+              setAlerts(alertList);
+            })
+            .catch((error) => {
+              console.error("ALERT REFRESH ERROR:", error);
+            });
         }
+      } catch (error) {
+        console.error("WEBSOCKET MESSAGE ERROR:", error);
+      }
+    };
 
-        return currentDevice;
-      });
+    websocket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
 
-      const newChartPoint = {
-        time: new Date(newReading.recorded_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        lpg: Number(newReading.lpg_ppm),
-        temperature: Number(newReading.temperature),
-        humidity: Number(newReading.humidity),
-      };
-
-      setHistory((currentHistory) => [...currentHistory, newChartPoint]);
-    });
-    socket.on("alert-update", (newAlert) => {
-      console.log("REAL-TIME ALERT UPDATE:", newAlert);
-
-      setAlerts((currentAlerts) => {
-        const existingAlert = currentAlerts.find(
-          (alert) => alert.id === newAlert.id,
-        );
-
-        if (existingAlert) {
-          return currentAlerts.map((alert) =>
-            alert.id === newAlert.id ? newAlert : alert,
-          );
-        }
-
-        return [newAlert, ...currentAlerts];
-      });
-    });
-    socket.on("disconnect", () => {
+    websocket.onclose = () => {
       console.log("Disconnected from Suraksha real-time server");
-    });
+    };
 
     return () => {
-      socket.disconnect();
+      websocket.close();
     };
   }, [navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem("surakshaUser");
     navigate("/", { replace: true });
+  };
+
+  const handleAcknowledge = async (alertId) => {
+    try {
+      const savedUser = localStorage.getItem("surakshaUser");
+
+      const parsedUser = JSON.parse(savedUser);
+
+      const response = await fetch(
+        `http://localhost:8000/api/alerts/${alertId}/acknowledge`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${parsedUser.token}`,
+          },
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to acknowledge alert");
+      }
+
+      setAlerts((currentAlerts) =>
+        currentAlerts.map((currentAlert) =>
+          currentAlert.id === alertId ? data.alert : currentAlert,
+        ),
+      );
+    } catch (error) {
+      console.error("ACKNOWLEDGE ALERT ERROR:", error);
+    }
   };
 
   if (!user) {
@@ -390,7 +450,9 @@ function Dashboard() {
 
               <div className="mt-6">
                 <p
-                  className={`text-4xl font-bold ${exhaustFanOn ? "text-red-600" : "text-green-600"}`}
+                  className={`text-4xl font-bold ${
+                    exhaustFanOn ? "text-red-600" : "text-green-600"
+                  }`}
                 >
                   {exhaustFanOn ? "ON" : "OFF"}
                 </p>
@@ -418,11 +480,8 @@ function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={history}>
                     <CartesianGrid strokeDasharray="3 3" />
-
                     <XAxis dataKey="time" />
-
                     <YAxis />
-
                     <Tooltip />
 
                     <Line
@@ -450,11 +509,8 @@ function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={history}>
                     <CartesianGrid strokeDasharray="3 3" />
-
                     <XAxis dataKey="time" />
-
                     <YAxis />
-
                     <Tooltip />
 
                     <Line
@@ -482,11 +538,8 @@ function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={history}>
                     <CartesianGrid strokeDasharray="3 3" />
-
                     <XAxis dataKey="time" />
-
                     <YAxis />
-
                     <Tooltip />
 
                     <Line
@@ -557,51 +610,14 @@ function Dashboard() {
                         <p className="mt-1 text-sm text-slate-700">
                           {alert.message}
                         </p>
+
                         {alert.acknowledged_at ? (
                           <p className="mt-2 text-xs text-green-600 font-medium">
                             ✓ Acknowledged
                           </p>
                         ) : (
                           <button
-                            onClick={async () => {
-                              try {
-                                const savedUser =
-                                  localStorage.getItem("surakshaUser");
-                                const parsedUser = JSON.parse(savedUser);
-
-                                const response = await fetch(
-                                  `http://localhost:5000/api/alerts/${alert.id}/acknowledge`,
-                                  {
-                                    method: "PATCH",
-                                    headers: {
-                                      Authorization: `Bearer ${parsedUser.token}`,
-                                    },
-                                  },
-                                );
-
-                                const data = await response.json();
-
-                                if (!response.ok) {
-                                  throw new Error(
-                                    data.message ||
-                                      "Failed to acknowledge alert",
-                                  );
-                                }
-
-                                setAlerts((currentAlerts) =>
-                                  currentAlerts.map((currentAlert) =>
-                                    currentAlert.id === alert.id
-                                      ? data.alert
-                                      : currentAlert,
-                                  ),
-                                );
-                              } catch (error) {
-                                console.error(
-                                  "ACKNOWLEDGE ALERT ERROR:",
-                                  error,
-                                );
-                              }
-                            }}
+                            onClick={() => handleAcknowledge(alert.id)}
                             className="mt-3 bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 transition"
                           >
                             Acknowledge Alert
@@ -615,6 +631,7 @@ function Dashboard() {
             </div>
           </div>
         )}
+
         {device && (
           <div className="mt-8 bg-white rounded-2xl shadow-sm p-6">
             <h3 className="text-xl font-semibold text-slate-800">
@@ -629,6 +646,7 @@ function Dashboard() {
                   {device.name}
                 </p>
               </div>
+
               <div className="bg-slate-50 rounded-xl p-4">
                 <p className="text-sm text-slate-500">Exhaust Fan</p>
 

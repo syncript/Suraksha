@@ -2,12 +2,14 @@ import time
 import random
 import requests
 
-
 API_URL = "http://127.0.0.1:8000/api/sensors"
 
+# Device 1 belongs to the account currently being used
 DEVICE_ID = 1
 
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozLCJleHAiOjE3ODk4OTE3Mzh9.4YnwMfWA4tUJl6LllllbdmHE1uvy2Wwm-m7nLIhGCtg"
+# Put the JWT token from your current login here locally.
+# Do NOT send the token to me.
+TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozLCJleHAiOjE3ODk5Nzg3MjJ9.Q5h05jA_DpAyD9tm-pxYSZT4foOR_hMkUfmythYPYiA"
 
 
 while True:
@@ -22,19 +24,23 @@ while True:
         "humidity": humidity
     }
 
-    response = requests.post(
-        API_URL,
-        json=data,
-        headers={
-            "Authorization": f"Bearer {TOKEN}"
-        }
-    )
+    try:
+        response = requests.post(
+            API_URL,
+            json=data,
+            headers={
+                "Authorization": f"Bearer {TOKEN}"
+            }
+        )
 
-    print(
-        f"LPG: {lpg_ppm} PPM | "
-        f"Temp: {temperature}°C | "
-        f"Humidity: {humidity}% | "
-        f"Status: {response.status_code}"
-    )
+        print(
+            f"LPG: {lpg_ppm} PPM | "
+            f"Temp: {temperature}°C | "
+            f"Humidity: {humidity}% | "
+            f"Status: {response.status_code}"
+        )
+
+    except requests.RequestException as error:
+        print("Connection error:", error)
 
     time.sleep(5)

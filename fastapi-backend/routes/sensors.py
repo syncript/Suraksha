@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from websocket_manager import broadcast_sensor_data
+
 from dependencies import get_db, get_current_user
 from models.device import Device
 from models.sensor_reading import SensorReading
@@ -14,6 +16,7 @@ class SensorData(BaseModel):
     lpg_ppm: float
     temperature: float
     humidity: float
+
 
 router = APIRouter(
     prefix="/api/sensors",
@@ -46,8 +49,9 @@ def get_sensor_readings(
 
     return readings
 
+
 @router.post("")
-def create_sensor_reading(
+async def create_sensor_reading(
     data: SensorData,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -97,7 +101,6 @@ def create_sensor_reading(
         alert_created = "critical"
 
     elif data.lpg_ppm >= 600:
-
         alert = Alert(
             device_id=data.device_id,
             type="LPG",
@@ -110,6 +113,18 @@ def create_sensor_reading(
 
     db.commit()
     db.refresh(reading)
+
+    # Send the new reading to connected WebSocket clients
+    await broadcast_sensor_data({
+        "device_id": reading.device_id,
+        "lpg_ppm": reading.lpg_ppm,
+        "temperature": reading.temperature,
+        "humidity": reading.humidity,
+        "recorded_at": reading.recorded_at.isoformat(),
+        "device_status": device.status,
+        "exhaust_fan_on": exhaust_fan_on,
+        "alert_created": alert_created
+    })
 
     return {
         "message": "Sensor reading saved",
