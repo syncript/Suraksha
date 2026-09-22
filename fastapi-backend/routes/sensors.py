@@ -88,26 +88,41 @@ async def create_sensor_reading(
     exhaust_fan_on = False
 
     if data.lpg_ppm >= 800:
-        exhaust_fan_on = True
+     exhaust_fan_on = True
+ 
+    existing_alert = db.query(Alert).filter(
+        Alert.device_id == data.device_id,
+        Alert.type == "LPG",
+        Alert.severity == "critical",
+        Alert.acknowledged_at.is_(None)
+    ).first()
 
+    if existing_alert is None:
         alert = Alert(
             device_id=data.device_id,
             type="LPG",
             severity="critical",
             message=f"Critical LPG level detected: {data.lpg_ppm} PPM"
         )
-
         db.add(alert)
         alert_created = "critical"
 
     elif data.lpg_ppm >= 600:
+
+      existing_alert = db.query(Alert).filter(
+        Alert.device_id == data.device_id,
+        Alert.type == "LPG",
+        Alert.severity == "warning",
+        Alert.acknowledged_at.is_(None)
+    ).first()
+
+    if existing_alert is None:
         alert = Alert(
             device_id=data.device_id,
             type="LPG",
             severity="warning",
             message=f"High LPG level detected: {data.lpg_ppm} PPM"
         )
-
         db.add(alert)
         alert_created = "warning"
 

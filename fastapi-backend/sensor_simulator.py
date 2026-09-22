@@ -9,7 +9,7 @@ DEVICE_ID = 1
 
 # Put the JWT token from your current login here locally.
 # Do NOT send the token to me.
-TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozLCJleHAiOjE3ODk5Nzg3MjJ9.Q5h05jA_DpAyD9tm-pxYSZT4foOR_hMkUfmythYPYiA"
+TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjozLCJleHAiOjE3OTAxNjUyNTF9.uL7rt65PyYKtUE5rmYeRs5YBgHsZCouLdcJqmu1Etlo"
 
 
 while True:
