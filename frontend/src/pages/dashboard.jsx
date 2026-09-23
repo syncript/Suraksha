@@ -334,7 +334,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user?.token) return;
 
-    const websocket = new WebSocket("ws://localhost:8000/ws");
+    const websocket = new WebSocket(
+      `ws://localhost:8000/ws?token=${encodeURIComponent(user.token)}`,
+    );
 
     websocket.onopen = () => {
       console.log("Connected to Suraksha real-time server");

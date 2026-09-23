@@ -8,6 +8,7 @@ from database import Base, engine
 from models import User, Device, SensorReading, Alert
 from routes.auth import router as auth_router
 from websocket_manager import connected_clients
+from auth_utils import decode_access_token
 
 
 Base.metadata.create_all(bind=engine)
@@ -53,15 +54,31 @@ def protected_test(current_user=Depends(get_current_user)):
     }
 
 
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    user_id = decode_access_token(token)
+
+    if user_id is None:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
-    connected_clients.append(websocket)
+
+    client = (websocket, user_id)
+    connected_clients.append(client)
 
     try:
         while True:
             await websocket.receive_text()
 
     except Exception:
-        if websocket in connected_clients:
-            connected_clients.remove(websocket)
+        if client in connected_clients:
+            connected_clients.remove(client)

@@ -126,11 +126,8 @@ async def create_sensor_reading(
         db.add(alert)
         alert_created = "warning"
 
-    db.commit()
-    db.refresh(reading)
-
-    # Send the new reading to connected WebSocket clients
-    await broadcast_sensor_data({
+    await broadcast_sensor_data(
+    {
         "device_id": reading.device_id,
         "lpg_ppm": reading.lpg_ppm,
         "temperature": reading.temperature,
@@ -139,12 +136,6 @@ async def create_sensor_reading(
         "device_status": device.status,
         "exhaust_fan_on": exhaust_fan_on,
         "alert_created": alert_created
-    })
-
-    return {
-        "message": "Sensor reading saved",
-        "reading": reading,
-        "device_status": device.status,
-        "exhaust_fan_on": exhaust_fan_on,
-        "alert_created": alert_created
-    }
+    },
+    user_id=current_user.id
+)

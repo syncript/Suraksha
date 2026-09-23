@@ -1,8 +1,10 @@
 import os
+
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,6 +15,7 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
 def hash_password(password: str) -> str:
     password_bytes = password.encode("utf-8")
+
     hashed = bcrypt.hashpw(
         password_bytes,
         bcrypt.gensalt()
@@ -41,3 +44,22 @@ def create_access_token(user_id: int):
         JWT_SECRET,
         algorithm=JWT_ALGORITHM
     )
+
+
+def decode_access_token(token: str):
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM]
+        )
+
+        user_id = payload.get("user_id")
+
+        if not user_id:
+            return None
+
+        return int(user_id)
+
+    except jwt.PyJWTError:
+        return None
