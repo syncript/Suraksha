@@ -211,6 +211,7 @@ export default function Dashboard() {
 
   const [user, setUser] = useState(null);
   const [device, setDevice] = useState(null);
+  const [devices, setDevices] = useState([]);
   const [reading, setReading] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -243,13 +244,13 @@ export default function Dashboard() {
   }, [navigate]);
 
   /* =========================================================
-     LOAD DEVICE + SENSOR DATA
+     LOAD USER DEVICES
      ========================================================= */
 
   useEffect(() => {
     if (!user?.token) return;
 
-    const loadDashboard = async () => {
+    const loadDevices = async () => {
       setLoading(true);
       setError("");
 
@@ -268,64 +269,101 @@ export default function Dashboard() {
 
         const deviceData = await deviceResponse.json();
 
-        const devices = Array.isArray(deviceData)
+        const loadedDevices = Array.isArray(deviceData)
           ? deviceData
           : deviceData.devices || [];
 
-        if (devices.length === 0) {
+        setDevices(loadedDevices);
+
+        if (loadedDevices.length === 0) {
+          selectedDeviceIdRef.current = null;
           setDevice(null);
           setReading(null);
           setHistory([]);
-          setLoading(false);
+          setExhaustFanOn(false);
           return;
         }
 
-        const selectedDevice = devices[0];
-
-        selectedDeviceIdRef.current = selectedDevice.id;
-        setDevice(selectedDevice);
-
-        /* ---------------------------------------------
-           SENSOR HISTORY
-           --------------------------------------------- */
-
-        const sensorResponse = await fetch(
-          `${API_BASE}/api/sensors/${selectedDevice.id}`,
-          { headers },
+        const currentDevice = loadedDevices.find(
+          (item) => item.id === selectedDeviceIdRef.current,
         );
 
-        if (sensorResponse.ok) {
-          const sensorData = await sensorResponse.json();
+        const initialDevice = currentDevice || loadedDevices[0];
 
-          const readings = Array.isArray(sensorData)
-            ? sensorData
-            : sensorData.readings || [];
-
-          if (readings.length > 0) {
-            setReading(readings[0]);
-
-            setHistory(
-              [...readings].reverse().map((item) => ({
-                time: formatTime(item.recorded_at),
-                lpg: Number(item.lpg_ppm || 0),
-                temperature: Number(item.temperature || 0),
-                humidity: Number(item.humidity || 0),
-              })),
-            );
-
-            setExhaustFanOn(Boolean(readings[0].exhaust_fan_on));
-          }
-        }
+        selectedDeviceIdRef.current = initialDevice.id;
+        setDevice(initialDevice);
       } catch (err) {
-        console.error("Dashboard loading error:", err);
-        setError("Unable to load dashboard data.");
+        console.error("Device loading error:", err);
+        setError("Unable to load dashboard devices.");
       } finally {
         setLoading(false);
       }
     };
 
-    loadDashboard();
+    loadDevices();
   }, [user]);
+
+  /* =========================================================
+     LOAD SENSOR DATA FOR SELECTED DEVICE
+     ========================================================= */
+
+  useEffect(() => {
+    if (!user?.token || !device?.id) return;
+
+    const loadSensorData = async () => {
+      setError("");
+
+      try {
+        const headers = {
+          Authorization: `Bearer ${user.token}`,
+        };
+
+        const sensorResponse = await fetch(
+          `${API_BASE}/api/sensors/${device.id}`,
+          { headers },
+        );
+
+        if (!sensorResponse.ok) {
+          throw new Error("Unable to load sensor data");
+        }
+
+        const sensorData = await sensorResponse.json();
+
+        const readings = Array.isArray(sensorData)
+          ? sensorData
+          : sensorData.readings || [];
+
+        if (readings.length > 0) {
+          const latestReading = readings[0];
+
+          setReading(latestReading);
+
+          setHistory(
+            [...readings].reverse().map((item) => ({
+              time: formatTime(item.recorded_at),
+              lpg: Number(item.lpg_ppm || 0),
+              temperature: Number(item.temperature || 0),
+              humidity: Number(item.humidity || 0),
+            })),
+          );
+
+          setExhaustFanOn(Boolean(latestReading.exhaust_fan_on));
+        } else {
+          setReading(null);
+          setHistory([]);
+          setExhaustFanOn(false);
+        }
+      } catch (err) {
+        console.error("Sensor loading error:", err);
+        setError("Unable to load sensor data for the selected device.");
+        setReading(null);
+        setHistory([]);
+        setExhaustFanOn(false);
+      }
+    };
+
+    loadSensorData();
+  }, [user, device?.id]);
 
   /* =========================================================
      WEBSOCKET REAL-TIME DATA
@@ -617,7 +655,7 @@ export default function Dashboard() {
             {/* IMAGE */}
 
             <img
-              src="/safety-banner.png"
+              src="/safety_banner.png"
               alt="LPG safety"
               className="absolute inset-0 w-full h-full object-cover"
             />
@@ -1051,6 +1089,31 @@ export default function Dashboard() {
                   <p className="text-sm text-slate-400 mt-1">
                     Connected monitoring device
                   </p>
+                  {devices.length > 1 && (
+                    <select
+                      value={device?.id ?? ""}
+                      onChange={(e) => {
+                        const selected = devices.find(
+                          (item) => item.id === Number(e.target.value),
+                        );
+
+                        if (selected) {
+                          selectedDeviceIdRef.current = selected.id;
+                          setDevice(selected);
+                          setReading(null);
+                          setHistory([]);
+                          setExhaustFanOn(false);
+                        }
+                      }}
+                      className="mt-3 w-full max-w-xs px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 outline-none focus:border-blue-400"
+                    >
+                      {devices.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name || `Device ${item.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div
